@@ -1,0 +1,228 @@
+
+    //1. Load the data file using pandas. 
+	import pandas as pd 
+	import numpy as np
+	import matplotlib as plt 
+	raw_df=pd.read_csv('googleplaystore.csv')
+	raw_df.head()
+
+    //2. Check for null values in the data. Get the number of null values for each column.
+	raw_df.isnull().any()
+	raw_df.isnull().sum()
+	
+    //3. Drop records with nulls in any of the columns. 
+	raw_df.dropna(axis=0, inplace=True)
+	
+    //4. Variables seem to have incorrect type and inconsistent formatting. You need to fix them: 
+
+		//4.1 Size column has sizes in Kb as well as Mb. To analyze, you’ll need to convert these to numeric.
+
+			//4.1.1 Extract the numeric value from the column
+
+			//4.1.2 Multiply the value by 1,000, if size is mentioned in Mb
+			
+		def value_to_float(x):
+		if type(x) == float or type(x) == int:
+			return x
+		if 'K' in x:
+			return float(x.replace('K', ''))
+		if 'M' in x:
+			return float(x.replace('M', '')) * 1000
+
+		raw_df['Size'] = raw_df['Size'].apply(value_to_float)
+		raw_df.head(100)
+
+		//4.2 Reviews is a numeric field that is loaded as a string field. Convert it to numeric (int/float).
+		raw_df['Reviews']=raw_df['Reviews'].astype(float)
+		raw_df.info()
+		
+		//4.3 Installs field is currently stored as string and has values like 1,000,000+. 
+
+			//4.3.1 Treat 1,000,000+ as 1,000,000
+
+			//4.3.2 remove ‘+’, ‘,’ from the field, convert it to integer
+			
+		def clean_installs(x):
+			if isinstance(x, str):
+				return (x.replace(',','').replace('+',''))
+			return (x)
+		raw_df['Installs']= raw_df['Installs'].apply(clean_installs).astype('float')
+		raw_df.head()
+
+		//4.4 Price field is a string and has $ symbol. Remove ‘$’ sign, and convert it to numeric.
+		def clean_price(y):
+			if isinstance(y, str): 
+				return (y.replace('$',''))
+			return (y)
+		raw_df['Price']=raw_df['Price'].apply(clean_price).astype('float')
+		raw_df.head()
+		
+	//5. Sanity checks:
+
+		//Average rating should be between 1 and 5 as only these values are allowed on the play store. Drop the rows that have a value outside this range.
+		raw_df.loc[raw_df.Rating < 1] & raw_df.loc[raw_df.Rating > 5]
+		
+		//Reviews should not be more than installs as only those who installed can review the app. If there are any such records, drop them.
+		raw_df.loc[raw_df['Reviews'] > raw_df['Installs']]
+		temp = raw_df[raw_df['Reviews']>raw_df['Installs']].index
+		raw_df.drop(labels=temp, inplace=True)
+		
+
+
+	//6. Performing univariate analysis: 
+
+		//Boxplot for Price
+		//Are there any outliers? Think about the price of usual apps on Play Store.
+		import matplotlib.pyplot as plt
+		import seaborn as sns 
+		%matplotlib inline
+		plt.boxplot(raw_df['Price'])
+		plt.show()
+		
+		//Boxplot for Reviews
+		//Are there any apps with very high number of reviews? Do the values seem right?
+		plt.boxplot(raw_df['Reviews'])
+		plt.show()
+		//yes, No
+		
+		//Histogram for Rating
+		//How are the ratings distributed? Is it more toward higher ratings?
+		//Histogram for Size
+		plt.hist(raw_df['Rating'])
+		plt.show()
+		//yes
+	 
+
+	//7. Outlier treatment: 
+
+		//Price: From the box plot, it seems like there are some apps with very high price. A price of $200 for an application on the Play Store is very high and suspicious!
+		//Check out the records with very high price
+		//Is 200 indeed a high price?
+		//Drop these as most seem to be junk apps
+		raw_df.loc[raw_df['Price'] > 200]
+		gt_200 = raw_df[raw_df['Price'] > 30].index
+		raw_df.drop(labels=gt_30, inplace=True)
+		raw_df.loc[raw_df['Price'] > 200]
+
+		//Reviews: Very few apps have very high number of reviews. These are all star apps that don’t help with the analysis and, in fact, will skew it. Drop records having more than 2 million reviews.
+		gt_2m = raw_df[raw_df['Reviews'] > 2000000 ].index
+		raw_df.drop(labels = gt_2m, inplace=True)
+		
+		//Installs:  There seems to be some outliers in this field too. Apps having very high number of installs should be dropped from the analysis.
+		//Find out the different percentiles – 10, 25, 50, 70, 90, 95, 99
+		//Decide a threshold as cutoff for outlier and drop records having values more than that
+		percentile_10 = raw_df.Installs.quantile(0.10)
+		print('10 percentile of Installs :',percentile_10)
+
+		percentile_25 = raw_df.Installs.quantile(0.25)
+		print('25 percentile of Installs :',percentile_25)
+
+		percentile_50 = raw_df.Installs.quantile(0.50)
+		print('50 percentile of Installs :',percentile_50)
+
+		percentile_70 = raw_df.Installs.quantile(0.70)
+		print('70 percentile of Installs :',percentile_70)
+
+		percentile_90 = raw_df.Installs.quantile(0.90)
+		print('90 percentile of Installs :',percentile_90)
+
+		percentile_95 = raw_df.Installs.quantile(0.95)
+		print('95 percentile of Installs :',percentile_95)
+
+		percentile_99 = raw_df.Installs.quantile(0.99)
+		print('99 percentile of Installs :',percentile_99)
+		
+		percentile = raw_df.Installs.quantile(0.95)
+		temp_percentile = raw_df[raw_df["Installs"] > percentile].index
+		raw_df.drop(labels = temp_percentile, inplace = True)
+		print(temp_percentile.value_counts().sum())
+		
+	//8. Bivariate analysis: Let’s look at how the available predictors relate to the variable of interest, i.e., our target variable rating. Make scatter plots (for numeric features) and box plots (for character features) to assess the relations between rating and the other features.
+
+		//Make scatter plot/joinplot for Rating vs. Price
+		//What pattern do you observe? Does rating increase with price?
+		sns.scatterplot(y ='Rating', x ='Price', data = raw_df)
+		plt.show()
+		//-->Generally on increasing the Price, Rating remains almost constant greater than 4.
+		//-->Since on increasing the Price, Rating remains almost constant greater than 4.
+		//-->Thus it can be concluded that their is very weak Positive correlation between Rating and Price.
+
+		//Make scatter plot/joinplot for Rating vs. Size
+		//Are heavier apps rated better?
+		sns.scatterplot(y ='Rating', x ='Size', data = raw_df)
+		plt.show()		
+		//-->Yes, patterns can be observed between Size and Rating ie. their is correlation between Size and Rating.
+		//-->Generally on increasing Rating, Size of App also increases. But this is not always true ie. for higher Rating, their is constant Size. Thus we can conclude that their is positive correlation between Size and Rating.
+
+
+		//Make scatter plot/joinplot for Rating vs. Reviews
+		//Does more review mean a better rating always?
+		sns.scatterplot(y ='Rating', x ='Reviews', data = raw_df)
+		plt.show()
+		//-->Generally on increasing the reviews, Rating remains almost constant greater than 4.5.
+		//-->Since on increasing the Reveiws, Rating remains almost constant greater than 4.5.
+		
+		//Make boxplot for Rating vs. Content Rating
+		//Is there any difference in the ratings? Are some types liked better?
+		sns.boxplot(y ='Rating', x ='Content Rating', data = raw_df)
+		plt.show()
+		//-->Content rating is evenly distributed for --Everyone, Teen and Mature. Whereas aparsinly populated for only 18+ and underated
+		
+		Make boxplot for Ratings vs. Category
+		Which genre has the best ratings?
+		sns.boxplot(y ='Rating', x ='Category', data = raw_df)
+		plt.show()
+		//-->The graph is evenly distributed all through out.
+
+	
+	8. Data preprocessing
+
+	//For the steps below, create a copy of the dataframe to make all the edits. Name it inp1.
+	inp1=raw_df.copy()
+	inp1.head()
+
+	//Reviews and Install have some values that are still relatively very high. Before building a linear regression model, you need to reduce the skew. Apply log transformation (np.log1p) to Reviews and Installs.
+	inp1['Reviews']=np.log1p(inp1['Reviews'])
+	inp1['Installs']=np.log1p(inp1['Installs'])
+		
+	//Drop columns App, Last Updated, Current Ver, and Android Ver. These variables are not useful for our task.
+	inp1.drop(["Last Updated","Current Ver","Android Ver","App"],axis=1,inplace=True)
+		
+	//Get dummy columns for Category, Genres, and Content Rating. This needs to be done as the models do not understand categorical data, and all data should be numeric. Dummy encoding is one way to convert character fields to numeric. Name of dataframe should be inp2.
+	categorical_cols=['Category','Content Rating', 'Genres']
+
+	for category in categorical_cols:
+    temp_category=pd.get_dummies(inp1[category],prefix=category)
+    inp1=pd.merge(left=inp1, right=temp_category, left_index=True, right_index=True,)
+	
+	//9. Train test split  and apply 70-30 split. Name the new dataframes df_train and df_test.
+	from sklearn.model_selection import train_test_split 
+	df_train=inp1.iloc[:,2:]
+	df_test=inp1.iloc[:,[1]]
+	
+	//10. Separate the dataframes into X_train, y_train, X_test, and y_test.
+	X_train, X_test, y_train, y_test= train_test_split( df_train, df_test, test_size=0.30, random_state=1)
+	X_train.shape,X_test.shape
+	
+	//11 . Model building
+	//Use linear regression as the technique
+	//Report the R2 on the train set
+		
+	from sklearn.linear_model import LinearRegression
+	linreg=LinearRegression()
+	from statsmodels.api import OLS
+	from sklearn.metrics import r2_score
+	from sklearn.metrics import mean_squared_error as ms
+
+	Model=linreg.fit(X_train, y_train)
+	predict=linreg.predict(X_test)
+
+	y_test=np.array(y_test)
+	predict=np.array(predict)
+
+	a=pd.DataFrame({'Actual':y_test.flatten(),'Predicted':predict.flatten()});a.head(10)
+	fig=a.head(25)
+	fig.plot(kind='bar',figsize=(10,8
+	
+	//12. Make predictions on test set and report R2.
+	print('R2_Score=',r2_score(y_test,predict))
